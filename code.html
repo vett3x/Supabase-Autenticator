@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Supabase Authentication</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#00c7b3",
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#0f2321", // Very dark green/black
+                        "surface-dark": "#173632", // Input bg
+                        "border-dark": "#2e6b65", // Input border
+                        "text-secondary": "#8dcec8", // Light teal text
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar to match the theme if needed, purely CSS */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f2321; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2e6b65; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00c7b3; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display antialiased text-slate-900 dark:text-white h-screen flex overflow-hidden">
+<!-- Left Section: Authentication Form -->
+<div class="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:flex-none lg:px-20 xl:px-24 w-full lg:w-1/2 xl:w-[600px] bg-background-light dark:bg-background-dark overflow-y-auto">
+<div class="mx-auto w-full max-w-sm lg:w-96">
+<!-- Logo Header -->
+<div class="flex items-center gap-3 mb-10">
+<div class="size-8 text-primary">
+<svg class="w-full h-full" fill="none" viewbox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 42.4379C4 42.4379 14.0962 36.0744 24 41.1692C35.0664 46.8624 44 42.2078 44 42.2078L44 7.01134C44 7.01134 35.068 11.6577 24.0031 5.96913C14.0971 0.876274 4 7.27094 4 7.27094L4 42.4379Z" fill="currentColor"></path>
+</svg>
+</div>
+<h2 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Supabase</h2>
+</div>
+<!-- Page Heading -->
+<div>
+<h2 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Welcome back</h2>
+<p class="mt-2 text-sm text-slate-600 dark:text-text-secondary">
+                    Enter your details below to access the dashboard.
+                </p>
+</div>
+<div class="mt-8">
+<!-- Social Auth -->
+<div class="grid grid-cols-1 gap-3">
+<button class="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 dark:border-border-dark bg-white dark:bg-surface-dark px-3 py-3 text-slate-900 dark:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors hover:bg-slate-50 dark:hover:bg-[#1f4a44]" type="button">
+<svg aria-hidden="true" class="h-5 w-5" fill="currentColor" viewbox="0 0 24 24">
+<path clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" fill-rule="evenodd"></path>
+</svg>
+<span class="text-sm font-semibold leading-6">Sign in with GitHub</span>
+</button>
+</div>
+<div class="relative mt-8">
+<div aria-hidden="true" class="absolute inset-0 flex items-center">
+<div class="w-full border-t border-slate-300 dark:border-border-dark"></div>
+</div>
+<div class="relative flex justify-center">
+<span class="bg-background-light dark:bg-background-dark px-2 text-sm text-slate-500 dark:text-text-secondary">Or continue with</span>
+</div>
+</div>
+<!-- Form Fields -->
+<div class="mt-8 space-y-6">
+<div>
+<label class="block text-sm font-medium leading-6 text-slate-900 dark:text-white mb-2" for="email">Email Address</label>
+<div class="mt-2">
+<input autocomplete="email" class="block w-full rounded-lg border-0 py-3 px-4 text-slate-900 dark:text-white shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-border-dark placeholder:text-slate-400 dark:placeholder:text-text-secondary focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 bg-white dark:bg-surface-dark" id="email" name="email" placeholder="you@example.com" required="" type="email"/>
+</div>
+</div>
+<div>
+<label class="block text-sm font-medium leading-6 text-slate-900 dark:text-white mb-2" for="password">Password</label>
+<div class="relative mt-2 rounded-lg shadow-sm">
+<input autocomplete="current-password" class="block w-full rounded-lg border-0 py-3 px-4 pr-10 text-slate-900 dark:text-white ring-1 ring-inset ring-slate-300 dark:ring-border-dark placeholder:text-slate-400 dark:placeholder:text-text-secondary focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 bg-white dark:bg-surface-dark" id="password" name="password" placeholder="Your password" required="" type="password"/>
+<div class="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer text-slate-400 dark:text-text-secondary hover:text-primary transition-colors">
+<span class="material-symbols-outlined" style="font-size: 20px;">visibility_off</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center">
+<input class="h-4 w-4 rounded border-slate-300 dark:border-border-dark text-primary focus:ring-primary bg-white dark:bg-surface-dark" id="remember-me" name="remember-me" type="checkbox"/>
+<label class="ml-2 block text-sm text-slate-900 dark:text-text-secondary" for="remember-me">Remember me</label>
+</div>
+<div class="text-sm">
+<a class="font-medium text-primary hover:text-[#00a896] transition-colors" href="#">Forgot password?</a>
+</div>
+</div>
+<!-- Submit Button -->
+<div>
+<button class="flex w-full justify-center rounded-lg bg-primary px-3 py-3 text-sm font-semibold leading-6 text-slate-900 shadow-sm hover:bg-[#00a896] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-all duration-200" type="submit">
+                            Sign In
+                        </button>
+</div>
+</div>
+<div class="mt-8 text-center text-sm text-slate-500 dark:text-text-secondary">
+                    Don't have an account? 
+                    <a class="font-medium text-primary hover:text-[#00a896] transition-colors ml-1" href="#">Sign Up Now</a>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Section: Visual / Image -->
+<div class="relative hidden w-0 flex-1 lg:block">
+<!-- Abstract gradient overlay to match Supabase style -->
+<div class="absolute inset-0 bg-gradient-to-br from-background-dark/80 via-transparent to-primary/20 mix-blend-multiply z-10 pointer-events-none"></div>
+<!-- Main background image -->
+<img alt="Abstract futuristic digital landscape with dark green code aesthetic" class="absolute inset-0 h-full w-full object-cover" data-alt="Abstract futuristic digital landscape with dark green code aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3NdLS8PYObuz02ZUlaXbKsWa1p0wEKDSIUqTSkX56ig41LA73DfkzDH14LKfXKcPZUlj7khX4kBrgiijDfS4KGNd1OoemTT3B37y0gcy_rvWMRiycR2GHkbFyjpUYdSTTQ232SJZRCk2x_y22INx43IF05xb6U5KYuBfvPOIkpaLSyVNCKuX1Cc4cQnz8CsrPgFQbip_JTN1-c07cGYA672WACzOyodSc-gHL2N_-2qidpZ2h1_8q12Tsk5nLJ2HgCPML5awkO6oU"/>
+<!-- Overlay Content on the image (Optional Testimonial or Branding) -->
+<div class="absolute bottom-0 left-0 right-0 p-12 z-20 bg-gradient-to-t from-background-dark via-background-dark/80 to-transparent">
+<blockquote class="mt-6">
+<p class="text-lg font-medium text-white italic">
+                    "Supabase gives us the power of a full Postgres database with the ease of use of a modern backend-as-a-service."
+                </p>
+<footer class="mt-3">
+<div class="flex items-center">
+<div class="text-base font-semibold text-primary">Frontend Developer</div>
+<svg class="mx-2 h-1 w-1 text-primary" fill="currentColor" viewbox="0 0 2 2"><circle cx="1" cy="1" r="1"></circle></svg>
+<div class="text-base text-slate-300">San Francisco, CA</div>
+</div>
+</footer>
+</blockquote>
+</div>
+</div>
+</body></html>
