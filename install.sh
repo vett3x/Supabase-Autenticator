@@ -139,6 +139,15 @@ echo -e "${GREEN}[0/5] Verificando y preparando el entorno...${NC}"
 TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
 echo -e "${BLUE}RAM detectada: ${TOTAL_RAM}MB${NC}"
 
+# Detectar espacio en disco (en GB)
+DISK_SPACE=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+echo -e "${BLUE}Espacio en disco disponible: ${DISK_SPACE}GB${NC}"
+
+if [ "$DISK_SPACE" -lt 10 ]; then
+    echo -e "${RED}Error: Necesitas al menos 10GB de espacio libre para Supabase.${NC}"
+    exit 1
+fi
+
 if [ "$TOTAL_RAM" -lt 1800 ]; then
     echo -e "${YELLOW}Advertencia: Tienes poca RAM. El build podría fallar.${NC}"
     NODE_MEM=1024
@@ -201,16 +210,17 @@ else
     SERVICE_K=$(grep "SERVICE_ROLE_KEY" .env | cut -d'=' -f2)
 fi
 echo -e "${BLUE}Reiniciando contenedores...${NC}"
-docker compose down
-# Reintento de pull en caso de error de red (común en Proxmox/CT)
-echo -e "${BLUE}Descargando imágenes (esto puede tardar)...${NC}"
-for i in {1..3}; do
-    if docker compose pull; then
-        break
-    fi
-    echo -e "${YELLOW}Reintentando descarga ($i/3)...${NC}"
-    sleep 5
-done
+    docker compose down
+    # Reintento de pull en caso de error de red (común en Proxmox/CT)
+    echo -e "${BLUE}Descargando imágenes pesadas de Supabase...${NC}"
+    echo -e "${YELLOW}Nota: Supabase ocupa ~4GB extraídos. El proceso puede parecer detenido en 'Postgres' mientras extrae.${NC}"
+    for i in {1..3}; do
+        if docker compose pull; then
+            break
+        fi
+        echo -e "${YELLOW}Reintentando descarga ($i/3)...${NC}"
+        sleep 5
+    done
 docker compose up -d
 cd ../..
 
