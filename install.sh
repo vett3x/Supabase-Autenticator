@@ -41,10 +41,12 @@ install_base_deps() {
     fi
     
     # 5. Instalar Node.js y NPM si no existen
-    if ! command -v node &> /dev/null; then
-        echo -e "${BLUE}Instalando Node.js 20.x...${NC}"
+    if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
+        echo -e "${BLUE}Instalando Node.js 20.x y NPM...${NC}"
         curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
         apt-get install -y nodejs
+        # Forzar actualización de hash de comandos
+        hash -r
     fi
 }
 
@@ -275,19 +277,34 @@ echo -e "${BLUE}Limpiando archivos temporales y dependencias...${NC}"
 rm -rf .next
 rm -rf node_modules
 rm -f package-lock.json
-npm cache clean --force
 
-echo -e "${BLUE}Instalando dependencias...${NC}"
-npm install
+if ! command -v npm &> /dev/null; then
+    echo -e "${RED}Error: npm no está instalado. Intentando reinstalar dependencias base...${NC}"
+    install_base_deps
+fi
+
+if command -v npm &> /dev/null; then
+    npm cache clean --force
+    echo -e "${BLUE}Instalando dependencias...${NC}"
+    npm install
+else
+    echo -e "${RED}Error crítico: No se pudo encontrar npm después del intento de instalación.${NC}"
+    exit 1
+fi
 
 # Solución para "JavaScript heap out of memory"
 # Asignar memoria a Node de forma dinámica basada en la RAM disponible
 export NODE_OPTIONS="--max-old-space-size=$NODE_MEM"
 
 # Forzar el build y capturar errores (Configurado para ignorar errores de TS/Lint en next.config.ts)
+if ! command -v npx &> /dev/null; then
+    echo -e "${RED}Error: npx no está disponible. No se puede realizar el build.${NC}"
+    exit 1
+fi
+
 if ! NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 npx next build; then
-    echo -e "${RED}Error: El build de Next.js falló por falta de recursos.${NC}"
-    echo -e "${YELLOW}Sugerencia: Aumenta la RAM de tu CT en Proxmox a al menos 2GB temporalmente.${NC}"
+    echo -e "${RED}Error: El build de Next.js falló.${NC}"
+    echo -e "${YELLOW}Esto puede ser por falta de RAM (mínimo 2GB) o por un error en el código.${NC}"
     exit 1
 fi
 # Verificar que la carpeta .next existe después del build
