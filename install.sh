@@ -285,6 +285,9 @@ pkill -f "next-router-worker" || true
 pkill -f "next-render-worker" || true
 pkill -f "next" || true
 
+# Asegurar que la base de datos no esté bloqueada
+rm -f auth.db-shm auth.db-wal || true
+
 # Limpiar cache y builds anteriores para asegurar una instalación limpia
 echo -e "${BLUE}Limpiando archivos temporales y dependencias...${NC}"
 rm -rf .next
