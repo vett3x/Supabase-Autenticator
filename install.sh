@@ -116,13 +116,30 @@ fi
 
 # 4. Instalación y Build
 echo -e "${GREEN}[4/5] Instalando y Construyendo...${NC}"
-# Limpiar cache de next para evitar errores de actualización
+# Limpiar cache y builds anteriores para asegurar una instalación limpia
 rm -rf .next
+rm -rf node_modules
 npm install
-npm run build
+# Forzar el build y capturar errores
+if ! npm run build; then
+    echo -e "${RED}Error: El build de Next.js falló.${NC}"
+    exit 1
+fi
+# Verificar que la carpeta .next existe después del build
+if [ ! -d ".next" ]; then
+    echo -e "${RED}Error: No se encontró la carpeta .next después del build.${NC}"
+    exit 1
+fi
 
 # 5. Herramientas CLI y Persistencia
 echo -e "${GREEN}[5/5] Actualizando herramientas CLI y Servicio...${NC}"
+
+# Abrir puertos en el firewall si existe (ufw)
+if command -v ufw >/dev/null 2>&1; then
+    echo -e "${BLUE}Asegurando que los puertos 3000 y 8000 estén abiertos...${NC}"
+    ufw allow 3000/tcp
+    ufw allow 8000/tcp
+fi
 
 # Comando para cambiar contraseña
 cat <<EOF > /usr/local/bin/supabase-auth-passwd
