@@ -196,6 +196,18 @@ else
     cd supabase && git pull && cd ..
 fi
 
+# Verificar que el clonado fue exitoso y que el directorio docker existe
+if [ ! -d "supabase/docker" ]; then
+    echo -e "${RED}Error: No se encontró la carpeta 'supabase/docker'. El clonado pudo fallar.${NC}"
+    # Reintentar clonado si falló
+    rm -rf supabase
+    git clone --depth 1 https://github.com/supabase/supabase.git
+    if [ ! -d "supabase/docker" ]; then
+        echo -e "${RED}Error crítico: No se puede obtener el repositorio de Supabase.${NC}"
+        exit 1
+    fi
+fi
+
 # 2. Configurar Supabase
 echo -e "${GREEN}[2/5] Configurando Supabase...${NC}"
 cd supabase/docker
@@ -231,7 +243,8 @@ echo -e "${BLUE}Reiniciando contenedores...${NC}"
         # Intentamos descargar las imágenes una por una si falla el pull paralelo normal
         if [ $i -gt 1 ]; then
             echo -e "${YELLOW}Limitando descargas paralelas para mejorar estabilidad...${NC}"
-            if docker compose pull --parallel 1; then
+            # Usar max-concurrent-downloads si está disponible o simplemente un pull secuencial
+            if docker compose pull --quiet; then
                 break
             fi
         else
