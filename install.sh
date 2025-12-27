@@ -31,31 +31,52 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# Pedir credenciales personalizadas
-echo -e "${CYAN}Configuración de acceso al panel:${NC}"
-read -p "Introduce el Email para el panel: " ADMIN_EMAIL
-read -s -p "Introduce la Contraseña para el panel: " ADMIN_PASS
-echo ""
+# Detectar si es una actualización
+IS_UPDATE=false
+if [ -f ".env.local" ]; then
+    IS_UPDATE=true
+    echo -e "${BLUE}>>> Detectada instalación existente. Modo Actualización activado. <<<${NC}"
+    ADMIN_EMAIL=$(grep "ADMIN_EMAIL" .env.local | cut -d'=' -f2) # Intentar recuperar si lo guardamos
+else
+    # Pedir credenciales personalizadas (Solo en instalación limpia)
+    echo -e "${CYAN}Configuración de acceso al panel:${NC}"
+    read -p "Introduce el Email para el panel: " ADMIN_EMAIL
+    read -s -p "Introduce la Contraseña para el panel: " ADMIN_PASS
+    echo ""
+fi
 
 # 0. Preparación del Entorno
 echo -e "${GREEN}[0/5] Verificando y preparando el entorno...${NC}"
-apt-get update && apt-get install -y curl git openssl build-essential jq
 
-# Instalar Docker y Node.js si no existen
+# Solución para error de docker-compose en Debian/Ubuntu con Python 3.12+
+if [ -f /usr/lib/python3.12/dist-packages/compose/cli/main.py ] || [ -x "$(command -v apt-get)" ]; then
+    echo -e "${BLUE}Asegurando compatibilidad de herramientas de sistema...${NC}"
+    apt-get update && apt-get install -y python3-pip python3-setuptools
+    # Instalar distutils que falta en Python 3.12+ para el docker-compose antiguo
+    apt-get install -y python3-launchpadlib || true
+fi
+
+# Instalar Docker y Docker Compose V2 (el comando moderno es 'docker compose')
 if ! [ -x "$(command -v docker)" ]; then
     curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh && rm get-docker.sh
 fi
-if ! [ -x "$(command -v docker-compose)" ]; then
-    apt-get install -y docker-compose
+
+# Instalar el plugin de Docker Compose V2 si no está (evita problemas de Python/distutils)
+if ! docker compose version >/dev/null 2>&1; then
+    echo -e "${BLUE}Instalando Docker Compose V2 (Plugin)...${NC}"
+    apt-get install -y docker-compose-plugin
 fi
 if ! [ -x "$(command -v node)" ]; then
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs
 fi
 
-# 1. Clonar Supabase
-echo -e "${GREEN}[1/5] Descargando Supabase...${NC}"
+# 1. Clonar/Actualizar Supabase
+echo -e "${GREEN}[1/5] Gestionando Supabase...${NC}"
 if [ ! -d "supabase" ]; then
     git clone --depth 1 https://github.com/supabase/supabase.git
+else
+    echo -e "${BLUE}Actualizando repositorio de Supabase...${NC}"
+    cd supabase && git pull && cd ..
 fi
 
 # 2. Configurar Supabase
@@ -71,24 +92,37 @@ if [ ! -f ".env" ]; then
     sed -i "s/JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long/JWT_SECRET=$JWT_SEC/g" .env
     sed -i "s/ANON_KEY=.*$/ANON_KEY=$ANON_K/g" .env
     sed -i "s/SERVICE_ROLE_KEY=.*$/SERVICE_ROLE_KEY=$SERVICE_K/g" .env
+else
+    echo -e "${BLUE}Cargando configuración existente de Supabase...${NC}"
+    DB_PASS=$(grep "POSTGRES_PASSWORD" .env | cut -d'=' -f2)
+    JWT_SEC=$(grep "JWT_SECRET" .env | cut -d'=' -f2)
+    ANON_K=$(grep "ANON_KEY" .env | cut -d'=' -f2)
+    SERVICE_K=$(grep "SERVICE_ROLE_KEY" .env | cut -d'=' -f2)
 fi
-docker-compose up -d
+echo -e "${BLUE}Reiniciando contenedores...${NC}"
+docker compose down
+docker compose up -d
 cd ../..
 
 # 3. Configurar el Panel
 echo -e "${GREEN}[3/5] Configurando el Panel...${NC}"
-PANEL_JWT=$(openssl rand -hex 32)
-echo "JWT_SECRET=$PANEL_JWT" > .env.local
-echo "SUPABASE_STUDIO_URL=http://localhost:8000" >> .env.local
-echo "AUTH_PASSWORD=$ADMIN_PASS" >> .env.local
+if [ "$IS_UPDATE" = false ]; then
+    PANEL_JWT=$(openssl rand -hex 32)
+    echo "JWT_SECRET=$PANEL_JWT" > .env.local
+    echo "SUPABASE_STUDIO_URL=http://localhost:8000" >> .env.local
+    echo "AUTH_PASSWORD=$ADMIN_PASS" >> .env.local
+    echo "ADMIN_EMAIL=$ADMIN_EMAIL" >> .env.local
+fi
 
 # 4. Instalación y Build
 echo -e "${GREEN}[4/5] Instalando y Construyendo...${NC}"
+# Limpiar cache de next para evitar errores de actualización
+rm -rf .next
 npm install
 npm run build
 
 # 5. Herramientas CLI y Persistencia
-echo -e "${GREEN}[5/5] Instalando herramientas CLI...${NC}"
+echo -e "${GREEN}[5/5] Actualizando herramientas CLI y Servicio...${NC}"
 
 # Comando para cambiar contraseña
 cat <<EOF > /usr/local/bin/supabase-auth-passwd
@@ -109,7 +143,9 @@ TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
 mkdir -p \$BACKUP_DIR
 echo "Iniciando backup completo..."
 # Backup de la DB del panel
-cp $(pwd)/auth.db \$BACKUP_DIR/panel_db_\$TIMESTAMP.sqlite
+if [ -f "$(pwd)/auth.db" ]; then
+    cp $(pwd)/auth.db \$BACKUP_DIR/panel_db_\$TIMESTAMP.sqlite
+fi
 # Backup de la DB de Supabase
 docker exec supabase-db pg_dumpall -U postgres > \$BACKUP_DIR/supabase_full_\$TIMESTAMP.sql
 echo "Backup completado en: \$BACKUP_DIR"
@@ -134,15 +170,24 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload && systemctl enable supabase-auth.service && systemctl restart supabase-auth.service
 
-# Finalización con Info del Servidor
+# Finalización
 clear
 echo -e "${CYAN}===================================================${NC}"
-echo -e "${GREEN}      INSTALACIÓN COMPLETADA POR VETT3X             ${NC}"
+if [ "$IS_UPDATE" = true ]; then
+    echo -e "${GREEN}      ACTUALIZACIÓN COMPLETADA POR VETT3X           ${NC}"
+else
+    echo -e "${GREEN}      INSTALACIÓN COMPLETADA POR VETT3X             ${NC}"
+fi
 echo -e "${CYAN}===================================================${NC}"
 echo -e "${BLUE}INFORMACIÓN DEL PANEL:${NC}"
 echo -e "URL de Acceso: http://$(hostname -I | awk '{print $1}'):3000"
-echo -e "Email: $ADMIN_EMAIL"
-echo -e "Password: (La que introdujiste)"
+if [ "$IS_UPDATE" = true ]; then
+    echo -e "Email: (Configurado anteriormente)"
+    echo -e "Password: (Configurada anteriormente)"
+else
+    echo -e "Email: $ADMIN_EMAIL"
+    echo -e "Password: (La que introdujiste)"
+fi
 echo -e ""
 echo -e "${BLUE}INFORMACIÓN DE SUPABASE (INTERNO):${NC}"
 echo -e "Postgres Password: $DB_PASS"
@@ -156,5 +201,7 @@ echo -e "Realizar backup: ${YELLOW}supabase-auth-backup${NC}"
 echo -e "Ver logs: ${YELLOW}journalctl -u supabase-auth -f${NC}"
 echo -e "${CYAN}===================================================${NC}"
 
-# Inicializar la base de datos con el email/pass proporcionado
-node scripts/change-password-cli.js "$ADMIN_EMAIL" "$ADMIN_PASS"
+# Inicializar/Actualizar base de datos
+if [ "$IS_UPDATE" = false ]; then
+    node scripts/change-password-cli.js "$ADMIN_EMAIL" "$ADMIN_PASS"
+fi
