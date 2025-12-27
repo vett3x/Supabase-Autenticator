@@ -120,9 +120,15 @@ echo -e "${GREEN}[4/5] Instalando y Construyendo...${NC}"
 rm -rf .next
 rm -rf node_modules
 npm install
-# Forzar el build y capturar errores
-if ! npm run build; then
-    echo -e "${RED}Error: El build de Next.js falló.${NC}"
+
+# Solución para "JavaScript heap out of memory" en contenedores con poca RAM
+# Aumentamos el límite de memoria de Node y omitimos el chequeo de tipos/linting pesado durante el build
+export NODE_OPTIONS="--max-old-space-size=2048"
+
+# Forzar el build y capturar errores (con ignorado de errores de TS/Lint para ahorrar memoria)
+if ! NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 npx next build --no-lint; then
+    echo -e "${RED}Error: El build de Next.js falló por falta de recursos.${NC}"
+    echo -e "${YELLOW}Sugerencia: Aumenta la RAM de tu CT en Proxmox a al menos 2GB temporalmente.${NC}"
     exit 1
 fi
 # Verificar que la carpeta .next existe después del build
