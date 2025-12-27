@@ -7,23 +7,7 @@ RED='\033[0;31m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Arte ASCII y Presentación
-clear
-echo -e "${CYAN}"
-echo "██╗   ██╗███████╗████████╗████████╗██████╗ ██╗  ██╗"
-echo "██║   ██║██╔════╝╚══██╔══╝╚══██╔══╝╚════██╗╚██╗██╔╝"
-echo "██║   ██║█████╗     ██║      ██║    █████╔╝ ╚███╔╝ "
-echo "██╚╗ ██╔╝██╔══╝     ██║      ██║    ╚═══██╗ ██╔██╗ "
-echo " ╚████╔╝ ███████╗   ██║      ██║   ██████╔╝██╔╝ ██╗"
-echo "  ╚═══╝  ╚══════╝   ╚═╝      ╚═╝   ╚═════╝ ╚═╝  ╚═╝"
-echo -e "${NC}"
-echo -e "${BLUE}===================================================${NC}"
-echo -e "${GREEN}      S U P A B A S E   A U T H E N T I C A T O R    ${NC}"
-echo -e "${BLUE}             Created by: Vett3x                    ${NC}"
-echo -e "${BLUE}===================================================${NC}"
-echo -e "Este proyecto asegura tu instalación autoalojada de "
-echo -e "Supabase con un portal de acceso seguro y moderno."
-echo -e "${BLUE}---------------------------------------------------${NC}"
+# Arte ASCII y Presentación (Se movió al bucle del menú)
 
 # Verificar si se está ejecutando como root
 if [ "$EUID" -ne 0 ]; then
@@ -31,22 +15,139 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# Detectar si es una actualización
-IS_UPDATE=false
-if [ -f ".env.local" ]; then
-    IS_UPDATE=true
-    echo -e "${BLUE}>>> Detectada instalación existente. Modo Actualización activado. <<<${NC}"
-    ADMIN_EMAIL=$(grep "ADMIN_EMAIL" .env.local | cut -d'=' -f2) # Intentar recuperar si lo guardamos
-else
-    # Pedir credenciales personalizadas (Solo en instalación limpia)
-    echo -e "${CYAN}Configuración de acceso al panel:${NC}"
-    read -p "Introduce el Email para el panel: " ADMIN_EMAIL
-    read -s -p "Introduce la Contraseña para el panel: " ADMIN_PASS
-    echo ""
-fi
+# --- FUNCIONES DEL MENÚ ---
 
-# 0. Preparación del Entorno
+show_credentials() {
+    clear
+    echo -e "${CYAN}===================================================${NC}"
+    echo -e "${GREEN}      CREDENCIALES DE SUPABASE (Auto-generadas)     ${NC}"
+    echo -e "${CYAN}===================================================${NC}"
+    
+    if [ -f "supabase/docker/.env" ]; then
+        cd supabase/docker
+        DB_PASS=$(grep "POSTGRES_PASSWORD" .env | cut -d'=' -f2)
+        JWT_SEC=$(grep "JWT_SECRET" .env | cut -d'=' -f2)
+        ANON_K=$(grep "ANON_KEY" .env | cut -d'=' -f2)
+        SERVICE_K=$(grep "SERVICE_ROLE_KEY" .env | cut -d'=' -f2)
+        cd ../..
+        
+        echo -e "${BLUE}Base de Datos (PostgreSQL):${NC}"
+        echo -e "  Host: localhost"
+        echo -e "  Puerto: 5432"
+        echo -e "  Usuario: postgres"
+        echo -e "  Password: ${YELLOW}$DB_PASS${NC}"
+        echo -e ""
+        echo -e "${BLUE}API Keys:${NC}"
+        echo -e "  JWT Secret: ${YELLOW}$JWT_SEC${NC}"
+        echo -e "  Anon Key: ${YELLOW}${ANON_K:0:20}...${NC}"
+        echo -e "  Service Role Key: ${YELLOW}${SERVICE_K:0:20}...${NC}"
+        echo -e ""
+        echo -e "${BLUE}URLs Locales:${NC}"
+        echo -e "  Studio: http://localhost:8000"
+        echo -e "  API/Kong: http://localhost:8000"
+    else
+        echo -e "${RED}Error: Supabase aún no ha sido configurado.${NC}"
+    fi
+    echo -e "${CYAN}===================================================${NC}"
+    read -p "Presiona Enter para volver al menú..."
+}
+
+show_logs() {
+    echo -e "${BLUE}Mostrando logs de servicios (Ctrl+C para salir)...${NC}"
+    docker compose -f supabase/docker/docker-compose.yml logs -f --tail=50
+}
+
+run_backup() {
+    echo -e "${BLUE}Iniciando backup manual...${NC}"
+    /usr/local/bin/supabase-auth-backup
+    read -p "Presiona Enter para volver al menú..."
+}
+
+full_reinstall() {
+    clear
+    echo -e "${RED}⚠️  ADVERTENCIA: REINSTALACIÓN COMPLETA ⚠️${NC}"
+    echo -e "${RED}---------------------------------------${NC}"
+    echo -e "Esto eliminará:"
+    echo -e "1. Todos los contenedores de Supabase"
+    echo -e "2. Todos los volúmenes de datos (BASE DE DATOS COMPLETA)"
+    echo -e "3. Configuración del panel y usuarios"
+    echo -e ""
+    echo -e "${YELLOW}Se recomienda hacer un Backup (Opción 3) antes de continuar.${NC}"
+    echo -e ""
+    read -p "¿ESTÁS SEGURO? Escribe 'REINSTALAR' para confirmar: " CONFIRM
+
+    if [ "$CONFIRM" != "REINSTALAR" ]; then
+        echo -e "${BLUE}Reinstalación cancelada.${NC}"
+        sleep 2
+        return
+    fi
+
+    echo -e "${RED}Iniciando limpieza total...${NC}"
+    
+    # 1. Detener y borrar contenedores y volúmenes
+    if [ -d "supabase/docker" ]; then
+        cd supabase/docker
+        docker compose down -v
+        cd ../..
+    fi
+
+    # 2. Eliminar carpetas y archivos de configuración
+    echo -e "${BLUE}Borrando archivos y configuraciones...${NC}"
+    rm -rf supabase
+    rm -f .env.local
+    rm -f auth.db
+    rm -rf .next
+    rm -rf node_modules
+    
+    # 3. Eliminar servicio systemd si existe
+    if [ -f "/etc/systemd/system/supabase-auth.service" ]; then
+        systemctl stop supabase-auth.service || true
+        systemctl disable supabase-auth.service || true
+        rm /etc/systemd/system/supabase-auth.service
+        systemctl daemon-reload
+    fi
+
+    echo -e "${GREEN}Limpieza completada con éxito.${NC}"
+    echo -e "${BLUE}Iniciando instalación desde cero...${NC}"
+    sleep 2
+    
+    # Resetear variables y lanzar instalación normal
+    IS_UPDATE=false
+    run_install
+}
+
+# --- LÓGICA DE INSTALACIÓN PRINCIPAL ---
+
+run_install() {
+    # Detectar si es una actualización
+    IS_UPDATE=false
+    if [ -f ".env.local" ]; then
+        IS_UPDATE=true
+        echo -e "${BLUE}>>> Modo Actualización activado. <<<${NC}"
+        ADMIN_EMAIL=$(grep "ADMIN_EMAIL" .env.local | cut -d'=' -f2)
+    else
+        echo -e "${CYAN}Configuración de acceso al panel:${NC}"
+        read -p "Introduce el Email para el panel: " ADMIN_EMAIL
+        read -s -p "Introduce la Contraseña para el panel: " ADMIN_PASS
+        echo ""
+    fi
+
+# 0. Verificando y preparando el entorno
 echo -e "${GREEN}[0/5] Verificando y preparando el entorno...${NC}"
+
+# Detectar memoria RAM total
+TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
+echo -e "${BLUE}RAM detectada: ${TOTAL_RAM}MB${NC}"
+
+if [ "$TOTAL_RAM" -lt 1800 ]; then
+    echo -e "${YELLOW}Advertencia: Tienes poca RAM. El build podría fallar.${NC}"
+    NODE_MEM=1024
+elif [ "$TOTAL_RAM" -lt 3500 ]; then
+    NODE_MEM=2048
+else
+    # Si tiene 4GB o más, asignamos 3GB al build para máxima velocidad y estabilidad
+    NODE_MEM=3072
+fi
 
 # Solución para error de docker-compose en Debian/Ubuntu con Python 3.12+
 if [ -f /usr/lib/python3.12/dist-packages/compose/cli/main.py ] || [ -x "$(command -v apt-get)" ]; then
@@ -101,6 +202,15 @@ else
 fi
 echo -e "${BLUE}Reiniciando contenedores...${NC}"
 docker compose down
+# Reintento de pull en caso de error de red (común en Proxmox/CT)
+echo -e "${BLUE}Descargando imágenes (esto puede tardar)...${NC}"
+for i in {1..3}; do
+    if docker compose pull; then
+        break
+    fi
+    echo -e "${YELLOW}Reintentando descarga ($i/3)...${NC}"
+    sleep 5
+done
 docker compose up -d
 cd ../..
 
@@ -115,18 +225,30 @@ if [ "$IS_UPDATE" = false ]; then
 fi
 
 # 4. Instalación y Build
-echo -e "${GREEN}[4/5] Instalando y Construyendo...${NC}"
+echo -e "${GREEN}[4/5] Preparando entorno de construcción...${NC}"
+
+# Limpiar procesos de Node anteriores que puedan estar bloqueando memoria o puertos
+echo -e "${BLUE}Limpiando procesos previos...${NC}"
+pkill -f "next-router-worker" || true
+pkill -f "next-render-worker" || true
+pkill -f "next" || true
+
 # Limpiar cache y builds anteriores para asegurar una instalación limpia
+echo -e "${BLUE}Limpiando archivos temporales y dependencias...${NC}"
 rm -rf .next
 rm -rf node_modules
+rm -f package-lock.json
+npm cache clean --force
+
+echo -e "${BLUE}Instalando dependencias...${NC}"
 npm install
 
-# Solución para "JavaScript heap out of memory" en contenedores con poca RAM
-# Aumentamos el límite de memoria de Node y omitimos el chequeo de tipos/linting pesado durante el build
-export NODE_OPTIONS="--max-old-space-size=2048"
+# Solución para "JavaScript heap out of memory"
+# Asignar memoria a Node de forma dinámica basada en la RAM disponible
+export NODE_OPTIONS="--max-old-space-size=$NODE_MEM"
 
-# Forzar el build y capturar errores (con ignorado de errores de TS/Lint para ahorrar memoria)
-if ! NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 npx next build --no-lint; then
+# Forzar el build y capturar errores (Configurado para ignorar errores de TS/Lint en next.config.ts)
+if ! NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 npx next build; then
     echo -e "${RED}Error: El build de Next.js falló por falta de recursos.${NC}"
     echo -e "${YELLOW}Sugerencia: Aumenta la RAM de tu CT en Proxmox a al menos 2GB temporalmente.${NC}"
     exit 1
@@ -225,6 +347,52 @@ echo -e "Ver logs: ${YELLOW}journalctl -u supabase-auth -f${NC}"
 echo -e "${CYAN}===================================================${NC}"
 
 # Inicializar/Actualizar base de datos
-if [ "$IS_UPDATE" = false ]; then
-    node scripts/change-password-cli.js "$ADMIN_EMAIL" "$ADMIN_PASS"
-fi
+    if [ "$IS_UPDATE" = false ]; then
+        node scripts/change-password-cli.js "$ADMIN_EMAIL" "$ADMIN_PASS"
+    fi
+    
+    read -p "Presiona Enter para volver al menú..."
+}
+
+# --- MENÚ PRINCIPAL ---
+
+while true; do
+    clear
+    echo -e "${CYAN}"
+    echo "██╗   ██╗███████╗████████╗████████╗██████╗ ██╗  ██╗"
+    echo "██║   ██║██╔════╝╚══██╔══╝╚══██╔══╝╚════██╗╚██╗██╔╝"
+    echo "██║   ██║█████╗     ██║      ██║    █████╔╝ ╚███╔╝ "
+    echo "██╚╗ ██╔╝██╔══╝     ██║      ██║    ╚═══██╗ ██╔██╗ "
+    echo " ╚████╔╝ ███████╗   ██║      ██║   ██████╔╝██╔╝ ██╗"
+    echo "  ╚═══╝  ╚══════╝   ╚═╝      ╚═╝   ╚═════╝ ╚═╝  ╚═╝"
+    echo -e "${NC}"
+    echo -e "${BLUE}===================================================${NC}"
+    echo -e "${GREEN}      M E N Ú   D E   G E S T I Ó N   (Vett3x)       ${NC}"
+    echo -e "${BLUE}===================================================${NC}"
+    echo -e "1) 🚀 Instalar / Actualizar todo (Panel + Supabase)"
+    echo -e "2) 🔑 Ver Credenciales de Supabase (DB/Keys)"
+    echo -e "3) 📦 Realizar Backup (Panel + DB)"
+    echo -e "4) 📋 Ver Logs de Supabase"
+    echo -e "5) 🛠️ Cambiar Contraseña del Panel"
+    echo -e "6) 🧨 REINSTALAR TODO (Borra Datos)"
+    echo -e "7) ❌ Salir"
+    echo -e "${BLUE}---------------------------------------------------${NC}"
+    read -p "Selecciona una opción [1-7]: " OPTION
+
+    case $OPTION in
+        1) run_install ;;
+        2) show_credentials ;;
+        3) run_backup ;;
+        4) show_logs ;;
+        5) 
+            read -p "Nuevo Email: " NEW_EMAIL
+            read -s -p "Nueva Contraseña: " NEW_PASS
+            echo ""
+            supabase-auth-passwd "$NEW_EMAIL" "$NEW_PASS"
+            read -p "Presiona Enter para volver..."
+            ;;
+        6) full_reinstall ;;
+        7) exit 0 ;;
+        *) echo -e "${RED}Opción no válida${NC}" ; sleep 2 ;;
+    esac
+done
