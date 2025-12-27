@@ -219,12 +219,34 @@ echo -e "${BLUE}Reiniciando contenedores...${NC}"
     # Reintento de pull en caso de error de red (común en Proxmox/CT)
     echo -e "${BLUE}Descargando imágenes pesadas de Supabase...${NC}"
     echo -e "${YELLOW}Nota: Supabase ocupa ~4GB extraídos. El proceso puede parecer detenido en 'Postgres' mientras extrae.${NC}"
-    for i in {1..3}; do
-        if docker compose pull; then
-            break
+    
+    # Configurar timeout de Docker Compose para redes lentas o inestables
+    export COMPOSE_HTTP_TIMEOUT=300
+    export DOCKER_CLIENT_TIMEOUT=300
+
+    for i in {1..5}; do
+        echo -e "${BLUE}Intento $i de 5 para descargar imágenes...${NC}"
+        # Intentamos descargar las imágenes una por una si falla el pull paralelo normal
+        if [ $i -gt 1 ]; then
+            echo -e "${YELLOW}Limitando descargas paralelas para mejorar estabilidad...${NC}"
+            if docker compose pull --parallel 1; then
+                break
+            fi
+        else
+            if docker compose pull; then
+                break
+            fi
         fi
-        echo -e "${YELLOW}Reintentando descarga ($i/3)...${NC}"
-        sleep 5
+        
+        if [ $i -eq 5 ]; then
+            echo -e "${RED}Error crítico: No se pudieron descargar las imágenes después de 5 intentos.${NC}"
+            echo -e "${YELLOW}Sugerencia: Revisa tu conexión a internet o intenta ejecutar 'docker compose pull' manualmente en 'supabase/docker'.${NC}"
+            exit 1
+        fi
+        
+        WAIT_TIME=$((i * 10))
+        echo -e "${YELLOW}Conexión reseteada o error de red. Reintentando en $WAIT_TIME segundos...${NC}"
+        sleep $WAIT_TIME
     done
 docker compose up -d
 cd ../..
