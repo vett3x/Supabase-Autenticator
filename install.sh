@@ -125,12 +125,14 @@ After=network.target docker.service
 Type=simple
 User=root
 WorkingDirectory=$(pwd)
+Environment=HOSTNAME=0.0.0.0
+Environment=PORT=3000
 ExecStart=/usr/bin/npm start
 Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload && systemctl enable supabase-auth.service && systemctl start supabase-auth.service
+systemctl daemon-reload && systemctl enable supabase-auth.service && systemctl restart supabase-auth.service
 
 # Finalización con Info del Servidor
 clear

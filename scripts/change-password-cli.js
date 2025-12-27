@@ -5,6 +5,16 @@ import bcrypt from "bcryptjs";
 const dbPath = path.join(process.cwd(), "auth.db");
 const db = new Database(dbPath);
 
+// Asegurar que la tabla existe
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    email TEXT UNIQUE,
+    password TEXT
+  )
+`);
+
 const email = process.argv[2];
 const password = process.argv[3];
 
