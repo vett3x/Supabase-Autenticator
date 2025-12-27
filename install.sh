@@ -15,7 +15,38 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# --- FUNCIONES DEL MENÚ ---
+# --- FUNCIONES DE UTILIDAD ---
+
+install_base_deps() {
+    echo -e "${GREEN}[0/5] Verificando y preparando el entorno...${NC}"
+    
+    # 1. Actualizar repositorios
+    apt-get update
+    
+    # 2. Instalar herramientas base
+    apt-get install -y curl git openssl build-essential jq psmisc
+    
+    # 3. Instalar Docker si no existe
+    if ! command -v docker &> /dev/null; then
+        echo -e "${BLUE}Instalando Docker...${NC}"
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        rm get-docker.sh
+    fi
+    
+    # 4. Instalar Docker Compose V2 (Plugin)
+    if ! docker compose version &> /dev/null; then
+        echo -e "${BLUE}Instalando Docker Compose V2...${NC}"
+        apt-get install -y docker-compose-plugin
+    fi
+    
+    # 5. Instalar Node.js y NPM si no existen
+    if ! command -v node &> /dev/null; then
+        echo -e "${BLUE}Instalando Node.js 20.x...${NC}"
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        apt-get install -y nodejs
+    fi
+}
 
 show_credentials() {
     clear
@@ -119,6 +150,26 @@ full_reinstall() {
 # --- LÓGICA DE INSTALACIÓN PRINCIPAL ---
 
 run_install() {
+    # Asegurar que las dependencias base estén instaladas antes de nada
+    install_base_deps
+
+    # Detectar memoria RAM total para optimizar el build
+    TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "$TOTAL_RAM" -lt 1800 ]; then
+        NODE_MEM=1024
+    elif [ "$TOTAL_RAM" -lt 3500 ]; then
+        NODE_MEM=2048
+    else
+        NODE_MEM=3072
+    fi
+
+    # Detectar espacio en disco (en GB)
+    DISK_SPACE=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+    if [ "$DISK_SPACE" -lt 10 ]; then
+        echo -e "${RED}Error: Necesitas al menos 10GB de espacio libre.${NC}"
+        exit 1
+    fi
+
     # Detectar si es una actualización
     IS_UPDATE=false
     if [ -f ".env.local" ]; then
@@ -132,53 +183,7 @@ run_install() {
         echo ""
     fi
 
-# 0. Verificando y preparando el entorno
-echo -e "${GREEN}[0/5] Verificando y preparando el entorno...${NC}"
-
-# Detectar memoria RAM total
-TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
-echo -e "${BLUE}RAM detectada: ${TOTAL_RAM}MB${NC}"
-
-# Detectar espacio en disco (en GB)
-DISK_SPACE=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
-echo -e "${BLUE}Espacio en disco disponible: ${DISK_SPACE}GB${NC}"
-
-if [ "$DISK_SPACE" -lt 10 ]; then
-    echo -e "${RED}Error: Necesitas al menos 10GB de espacio libre para Supabase.${NC}"
-    exit 1
-fi
-
-if [ "$TOTAL_RAM" -lt 1800 ]; then
-    echo -e "${YELLOW}Advertencia: Tienes poca RAM. El build podría fallar.${NC}"
-    NODE_MEM=1024
-elif [ "$TOTAL_RAM" -lt 3500 ]; then
-    NODE_MEM=2048
-else
-    # Si tiene 4GB o más, asignamos 3GB al build para máxima velocidad y estabilidad
-    NODE_MEM=3072
-fi
-
-# Solución para error de docker-compose en Debian/Ubuntu con Python 3.12+
-if [ -f /usr/lib/python3.12/dist-packages/compose/cli/main.py ] || [ -x "$(command -v apt-get)" ]; then
-    echo -e "${BLUE}Asegurando compatibilidad de herramientas de sistema...${NC}"
-    apt-get update && apt-get install -y python3-pip python3-setuptools
-    # Instalar distutils que falta en Python 3.12+ para el docker-compose antiguo
-    apt-get install -y python3-launchpadlib || true
-fi
-
-# Instalar Docker y Docker Compose V2 (el comando moderno es 'docker compose')
-if ! [ -x "$(command -v docker)" ]; then
-    curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh && rm get-docker.sh
-fi
-
-# Instalar el plugin de Docker Compose V2 si no está (evita problemas de Python/distutils)
-if ! docker compose version >/dev/null 2>&1; then
-    echo -e "${BLUE}Instalando Docker Compose V2 (Plugin)...${NC}"
-    apt-get install -y docker-compose-plugin
-fi
-if ! [ -x "$(command -v node)" ]; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs
-fi
+# 0. Verificando y preparando el entorno (Ya se hizo en install_base_deps si es necesario)
 
 # 1. Clonar/Actualizar Supabase
 echo -e "${GREEN}[1/5] Gestionando Supabase...${NC}"
