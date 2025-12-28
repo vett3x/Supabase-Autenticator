@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/supabase/:path*",
-        destination: `${process.env.SUPABASE_STUDIO_URL || "http://localhost:8000"}/:path*`,
+        destination: "http://supabase:this_password_is_insecure_change_it@localhost:8000/:path*",
       },
     ];
   },

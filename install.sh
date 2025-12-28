@@ -96,6 +96,45 @@ run_backup() {
     read -p "Presiona Enter para volver al menú..."
 }
 
+update_panel_only() {
+    echo -e "${GREEN}>>> Actualizando solo el Panel de Redirección <<<${NC}"
+    
+    # 1. Intentar pull del repositorio del panel si existe .git
+    if [ -d ".git" ]; then
+        echo -e "${BLUE}Buscando actualizaciones en el repositorio...${NC}"
+        if git pull | grep -q 'Already up to date.'; then
+            echo -e "${BLUE}El código ya está actualizado. Forzando reconstrucción...${NC}"
+        fi
+    else
+        echo -e "${YELLOW}Aviso: No se detectó repositorio Git. Se usarán los archivos locales actuales.${NC}"
+    fi
+
+    # 2. Limpiar procesos y caches
+    echo -e "${BLUE}Limpiando entorno...${NC}"
+    pkill -f "next" || true
+    rm -rf .next
+    rm -f auth.db-shm auth.db-wal || true
+
+    # 3. Build del panel
+    echo -e "${BLUE}Instalando dependencias y reconstruyendo...${NC}"
+    npm install
+    
+    # Detectar RAM para el build
+    TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "$TOTAL_RAM" -lt 1800 ]; then NODE_MEM=1024; elif [ "$TOTAL_RAM" -lt 3500 ]; then NODE_MEM=2048; else NODE_MEM=3072; fi
+    export NODE_OPTIONS="--max-old-space-size=$NODE_MEM"
+
+    if NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 npx next build; then
+        echo -e "${BLUE}Reiniciando servicio...${NC}"
+        systemctl restart supabase-auth.service
+        echo -e "${GREEN}¡Panel actualizado y reiniciado con éxito!${NC}"
+    else
+        echo -e "${RED}Error: El build falló. Revisa los logs.${NC}"
+    fi
+    
+    read -p "Presiona Enter para volver al menú..."
+}
+
 full_reinstall() {
     clear
     echo -e "${RED}⚠️  ADVERTENCIA: REINSTALACIÓN COMPLETA ⚠️${NC}"
@@ -212,16 +251,20 @@ fi
 echo -e "${GREEN}[2/5] Configurando Supabase...${NC}"
 cd supabase/docker
 if [ ! -f ".env" ]; then
-    cp .env.example .env
-    DB_PASS=$(openssl rand -hex 16)
-    JWT_SEC=$(openssl rand -hex 32)
-    ANON_K=$(openssl rand -hex 64)
-    SERVICE_K=$(openssl rand -hex 64)
-    sed -i "s/POSTGRES_PASSWORD=postgres/POSTGRES_PASSWORD=$DB_PASS/g" .env
-    sed -i "s/JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long/JWT_SECRET=$JWT_SEC/g" .env
-    sed -i "s/ANON_KEY=.*$/ANON_KEY=$ANON_K/g" .env
-    sed -i "s/SERVICE_ROLE_KEY=.*$/SERVICE_ROLE_KEY=$SERVICE_K/g" .env
-else
+        cp .env.example .env
+        DB_PASS=$(openssl rand -hex 16)
+        JWT_SEC=$(openssl rand -hex 32)
+        ANON_K=$(openssl rand -hex 64)
+        SERVICE_K=$(openssl rand -hex 64)
+        DASH_PASS="this_password_is_insecure_change_it" # Password por defecto de Kong
+        
+        sed -i "s/POSTGRES_PASSWORD=postgres/POSTGRES_PASSWORD=$DB_PASS/g" .env
+        sed -i "s/JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long/JWT_SECRET=$JWT_SEC/g" .env
+        sed -i "s/ANON_KEY=.*$/ANON_KEY=$ANON_K/g" .env
+        sed -i "s/SERVICE_ROLE_KEY=.*$/SERVICE_ROLE_KEY=$SERVICE_K/g" .env
+        # Asegurarnos de que el Dashboard use la contraseña que el proxy conoce
+        sed -i "s/DASHBOARD_PASSWORD=.*$/DASHBOARD_PASSWORD=$DASH_PASS/g" .env
+    else
     echo -e "${BLUE}Cargando configuración existente de Supabase...${NC}"
     DB_PASS=$(grep "POSTGRES_PASSWORD" .env | cut -d'=' -f2)
     JWT_SEC=$(grep "JWT_SECRET" .env | cut -d'=' -f2)
@@ -440,29 +483,31 @@ while true; do
     echo -e "${GREEN}      M E N Ú   D E   G E S T I Ó N   (Vett3x)       ${NC}"
     echo -e "${BLUE}===================================================${NC}"
     echo -e "1) 🚀 Instalar / Actualizar todo (Panel + Supabase)"
-    echo -e "2) 🔑 Ver Credenciales de Supabase (DB/Keys)"
-    echo -e "3) 📦 Realizar Backup (Panel + DB)"
-    echo -e "4) 📋 Ver Logs de Supabase"
-    echo -e "5) 🛠️ Cambiar Contraseña del Panel"
-    echo -e "6) 🧨 REINSTALAR TODO (Borra Datos)"
-    echo -e "7) ❌ Salir"
+    echo -e "2) 🆙 Actualizar SOLO el Panel (Más rápido)"
+    echo -e "3) 🔑 Ver Credenciales de Supabase (DB/Keys)"
+    echo -e "4) 📦 Realizar Backup (Panel + DB)"
+    echo -e "5) 📋 Ver Logs de Supabase"
+    echo -e "6) 🛠️ Cambiar Contraseña del Panel"
+    echo -e "7) 🧨 REINSTALAR TODO (Borra Datos)"
+    echo -e "8) ❌ Salir"
     echo -e "${BLUE}---------------------------------------------------${NC}"
-    read -p "Selecciona una opción [1-7]: " OPTION
+    read -p "Selecciona una opción [1-8]: " OPTION
 
     case $OPTION in
         1) run_install ;;
-        2) show_credentials ;;
-        3) run_backup ;;
-        4) show_logs ;;
-        5) 
+        2) update_panel_only ;;
+        3) show_credentials ;;
+        4) run_backup ;;
+        5) show_logs ;;
+        6) 
             read -p "Nuevo Email: " NEW_EMAIL
             read -s -p "Nueva Contraseña: " NEW_PASS
             echo ""
             supabase-auth-passwd "$NEW_EMAIL" "$NEW_PASS"
             read -p "Presiona Enter para volver..."
             ;;
-        6) full_reinstall ;;
-        7) exit 0 ;;
+        7) full_reinstall ;;
+        8) exit 0 ;;
         *) echo -e "${RED}Opción no válida${NC}" ; sleep 2 ;;
     esac
 done
