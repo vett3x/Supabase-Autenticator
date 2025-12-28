@@ -9,16 +9,9 @@ const JWT_SECRET = new TextEncoder().encode(
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get("auth_token")?.value;
 
-  // Si estamos en la página de login y ya tenemos token, ir al dashboard
+  // Si estamos en la página de login, dejar pasar siempre.
+  // No redirigimos automáticamente al dashboard para evitar bucles con el proxy
   if (request.nextUrl.pathname === "/" || request.nextUrl.pathname === "/api/auth/login") {
-    if (token) {
-      try {
-        await jwtVerify(token, JWT_SECRET);
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-      } catch (e) {
-        // Token inválido, dejar pasar al login
-      }
-    }
     return NextResponse.next();
   }
 

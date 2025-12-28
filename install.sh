@@ -201,6 +201,14 @@ full_reinstall() {
 # --- LÓGICA DE INSTALACIÓN PRINCIPAL ---
 
 run_install() {
+    # 0. Intentar pull del repositorio del panel para estar al día
+    if [ -d ".git" ]; then
+        echo -e "${BLUE}Buscando actualizaciones del panel...${NC}"
+        git stash &>/dev/null
+        git pull &>/dev/null
+        git stash pop &>/dev/null || true
+    fi
+
     # Asegurar que las dependencias base estén instaladas antes de nada
     install_base_deps
 
@@ -238,11 +246,23 @@ run_install() {
 
 # 1. Clonar/Actualizar Supabase
 echo -e "${GREEN}[1/5] Gestionando Supabase...${NC}"
+if [ -d "supabase" ]; then
+    # Verificar si es el repositorio correcto
+    if [ -d "supabase/.git" ]; then
+        REMOTE_URL=$(cd supabase && git remote get-url origin 2>/dev/null)
+        if [[ "$REMOTE_URL" != *"supabase/supabase"* ]]; then
+            echo -e "${RED}Aviso: La carpeta 'supabase' es incorrecta. Re-clonando...${NC}"
+            rm -rf supabase
+        fi
+    fi
+fi
+
 if [ ! -d "supabase" ]; then
+    echo -e "${BLUE}Clonando repositorio oficial de Supabase...${NC}"
     git clone --depth 1 https://github.com/supabase/supabase.git
 else
     echo -e "${BLUE}Actualizando repositorio de Supabase...${NC}"
-    cd supabase && git pull && cd ..
+    cd supabase && git stash && git pull && git stash pop || true && cd ..
 fi
 
 # Verificar que el clonado fue exitoso y que el directorio docker existe
