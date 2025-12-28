@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       const cookieStore = await cookies();
       cookieStore.set("auth_token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: false, // Deshabilitado para permitir acceso via IP (HTTP) en redes locales
         sameSite: "lax",
         maxAge: 60 * 60 * 24, // 24 hours
         path: "/",

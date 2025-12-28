@@ -124,7 +124,7 @@ update_panel_only() {
     if [ "$TOTAL_RAM" -lt 1800 ]; then NODE_MEM=1024; elif [ "$TOTAL_RAM" -lt 3500 ]; then NODE_MEM=2048; else NODE_MEM=3072; fi
     export NODE_OPTIONS="--max-old-space-size=$NODE_MEM"
 
-    if NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 npx next build; then
+    if NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production npx next build --no-lint; then
         echo -e "${BLUE}Reiniciando servicio...${NC}"
         systemctl restart supabase-auth.service
         echo -e "${GREEN}¡Panel actualizado y reiniciado con éxito!${NC}"
@@ -355,13 +355,14 @@ fi
 # Asignar memoria a Node de forma dinámica basada en la RAM disponible
 export NODE_OPTIONS="--max-old-space-size=$NODE_MEM"
 
-# Forzar el build y capturar errores (Configurado para ignorar errores de TS/Lint en next.config.ts)
+# Forzar el build y capturar errores
 if ! command -v npx &> /dev/null; then
     echo -e "${RED}Error: npx no está disponible. No se puede realizar el build.${NC}"
     exit 1
 fi
 
-if ! NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 npx next build; then
+# Usar variables de entorno para saltar checks y ahorrar memoria
+if ! NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production npx next build --no-lint; then
     echo -e "${RED}Error: El build de Next.js falló.${NC}"
     echo -e "${YELLOW}Esto puede ser por falta de RAM (mínimo 2GB) o por un error en el código.${NC}"
     exit 1
