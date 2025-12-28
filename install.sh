@@ -102,9 +102,13 @@ update_panel_only() {
     # 1. Intentar pull del repositorio del panel si existe .git
     if [ -d ".git" ]; then
         echo -e "${BLUE}Buscando actualizaciones en el repositorio...${NC}"
+        # Guardar cambios locales temporalmente para evitar conflictos con git pull
+        git stash
         if git pull | grep -q 'Already up to date.'; then
             echo -e "${BLUE}El código ya está actualizado. Forzando reconstrucción...${NC}"
         fi
+        # Recuperar cambios locales si existían
+        git stash pop || true
     else
         echo -e "${YELLOW}Aviso: No se detectó repositorio Git. Se usarán los archivos locales actuales.${NC}"
     fi
@@ -126,8 +130,14 @@ update_panel_only() {
 
     if NEXT_DISABLE_SOURCEMAPS=1 NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production npx next build --no-lint; then
         echo -e "${BLUE}Reiniciando servicio...${NC}"
-        systemctl restart supabase-auth.service
-        echo -e "${GREEN}¡Panel actualizado y reiniciado con éxito!${NC}"
+        # Recargar daemon por si el archivo .service ha cambiado y reiniciar
+        systemctl daemon-reload
+        if systemctl restart supabase-auth.service; then
+            echo -e "${GREEN}¡Panel actualizado y reiniciado con éxito!${NC}"
+        else
+            echo -e "${RED}Error: El servicio no pudo reiniciarse.${NC}"
+            echo -e "${YELLOW}Ejecuta 'journalctl -u supabase-auth.service -n 50' para ver el motivo.${NC}"
+        fi
     else
         echo -e "${RED}Error: El build falló. Revisa los logs.${NC}"
     fi
