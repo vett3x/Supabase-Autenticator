@@ -39,7 +39,8 @@ export function LoginForm() {
       });
 
       if (response.ok) {
-        router.push("/dashboard");
+        // Usar window.location.href para asegurar una carga completa del dashboard
+        window.location.href = "/dashboard";
       } else {
         const data = await response.json();
         setError(data.message || t.error_invalid);

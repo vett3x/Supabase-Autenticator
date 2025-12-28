@@ -2,7 +2,7 @@ import { LayoutDashboard, Database, Shield, LogOut, Settings } from "lucide-reac
 import { ChangePasswordForm } from "@/components/change-password-form";
 
 export default function Dashboard() {
-  const supabaseUrl = "/supabase";
+  const supabaseUrl = "/supabase/";
 
   return (
     <div className="min-h-screen bg-bg-main text-white font-sans">
