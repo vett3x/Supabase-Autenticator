@@ -259,8 +259,12 @@ fi
 
 # 2. Configurar Supabase
 echo -e "${GREEN}[2/5] Configurando Supabase...${NC}"
-cd supabase/docker
+# Asegurarnos de estar en la raíz del proyecto antes de entrar a supabase/docker
+cd "$(dirname "$0")"
+cd supabase/docker || { echo -e "${RED}Error: No se pudo entrar en supabase/docker${NC}"; exit 1; }
+
 if [ ! -f ".env" ]; then
+    if [ -f ".env.example" ]; then
         cp .env.example .env
         DB_PASS=$(openssl rand -hex 16)
         JWT_SEC=$(openssl rand -hex 32)
@@ -275,6 +279,10 @@ if [ ! -f ".env" ]; then
         # Asegurarnos de que el Dashboard use la contraseña que el proxy conoce
         sed -i "s/DASHBOARD_PASSWORD=.*$/DASHBOARD_PASSWORD=$DASH_PASS/g" .env
     else
+        echo -e "${RED}Error: No se encontró .env.example en $(pwd)${NC}"
+        exit 1
+    fi
+else
     echo -e "${BLUE}Cargando configuración existente de Supabase...${NC}"
     DB_PASS=$(grep "POSTGRES_PASSWORD" .env | cut -d'=' -f2)
     JWT_SEC=$(grep "JWT_SECRET" .env | cut -d'=' -f2)
